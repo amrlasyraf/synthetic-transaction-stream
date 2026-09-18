@@ -4,6 +4,8 @@ An open source producer of **entirely synthetic** retail transaction data. It cr
 
 The generator creates reproducible local files. A separate live service now produces a shared stream locally; public hosting and a Kafka adapter remain planned.
 
+For an always-running container and VPS plan, see [`docs/deployment.md`](docs/deployment.md).
+
 ## Generate data
 
 Requires Python 3.10 or newer. The generator has no runtime dependencies.
@@ -60,6 +62,8 @@ Open `http://127.0.0.1:8080/` in a browser for a small live viewer and endpoint 
 
 The process produces transactions independently of listeners. It writes events to a SQLite log and keeps seven days of published events. Pending status changes also survive a restart. The rate varies by hour and weekday; `--transactions-per-day` sets the approximate weekday volume (default 6000). The live database stays in `data/`, which Git ignores.
 
+The live reference tables are fixed at startup in this version: 250 users, 40 merchants, and 5 partners by default. Transactions continue to grow. Later, new reference records should appear in the stream before any transaction refers to them.
+
 Endpoints:
 
 | Endpoint | Purpose |
@@ -95,7 +99,8 @@ Occasionally, a fictional persona uses three separate accounts with styled versi
 
 1. Validate generated month-long patterns and the event contract.
 2. Validate the shared live service under longer runs and disconnections.
-3. Host the HTTP stream and reference snapshots publicly.
-4. Add a local Kafka adapter and optional database sink examples.
+3. Add gradual reference-table growth with creation events.
+4. Host the HTTP stream and reference snapshots publicly.
+5. Add a local Kafka adapter and optional database sink examples.
 
 No real financial data, personal data, payment credentials, or proprietary business rules belong in this repository.

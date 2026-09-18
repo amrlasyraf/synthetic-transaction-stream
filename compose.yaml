@@ -1,0 +1,37 @@
+services:
+  stream:
+    build: .
+    restart: unless-stopped
+    init: true
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - stream_data:/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=3).read()"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  proxy:
+    image: caddy:2
+    profiles: ["public"]
+    restart: unless-stopped
+    depends_on:
+      stream:
+        condition: service_healthy
+    environment:
+      STREAM_DOMAIN: ${STREAM_DOMAIN:-localhost}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  stream_data:
+  caddy_data:
+  caddy_config:

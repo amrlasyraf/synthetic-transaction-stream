@@ -1,0 +1,3 @@
+{$STREAM_DOMAIN:localhost} {
+    reverse_proxy stream:8080
+}
