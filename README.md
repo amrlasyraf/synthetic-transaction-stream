@@ -2,7 +2,7 @@
 
 An open source producer of **entirely synthetic** retail transaction data. It creates four related tables and a chronological event file suitable for learning ingestion, joins, streaming, and anomaly detection. The scenarios, identities, merchants, and partners are fictional and were created for this project.
 
-The first release generates files locally. A hosted stream and Kafka adapter are planned after the data model and output are reviewed.
+The generator creates reproducible local files. A separate live service now produces a shared stream locally; public hosting and a Kafka adapter remain planned.
 
 ## Generate data
 
@@ -48,6 +48,31 @@ python -m synthetic_transaction_stream.validate output
 
 `scenario_labels.csv` is intentionally separate from the event stream. Do not give it to a learner before an exercise if they should detect the scenarios themselves.
 
+## Shared live stream
+
+Start one producer and HTTP server locally:
+
+```sh
+python -m synthetic_transaction_stream.live --db data/events.sqlite --port 8080
+```
+
+In another terminal, inspect the stream with `curl -N http://127.0.0.1:8080/v1/transactions/stream` (`curl.exe -N` in PowerShell). Check `http://127.0.0.1:8080/health` for the current sequence range. The stream begins at the current tip, so leave it open for new events or supply `?after=0` to read retained events from the start.
+
+The process produces transactions independently of listeners. It writes events to a SQLite log and keeps seven days of published events. Pending status changes also survive a restart. The rate varies by hour and weekday; `--transactions-per-day` sets the approximate weekday volume (default 6000). The live database stays in `data/`, which Git ignores.
+
+Endpoints:
+
+| Endpoint | Purpose |
+| --- | --- |
+| `GET /health` | Current sequence range and retention |
+| `GET /v1/users`, `/v1/merchants`, `/v1/partners` | Reference snapshots |
+| `GET /v1/transactions/events?after=0&limit=100` | Bounded JSON replay |
+| `GET /v1/transactions/stream` | SSE live stream |
+
+The SSE stream starts at the current tip when no cursor is supplied. To catch up, connect with `?after=<last_sequence_no>` or the SSE `Last-Event-ID` header. A cursor older than the retained log receives HTTP `410` with the available sequence range. A connected stream sends a `gap` event and closes if it falls behind retention. Every listener sees the same global sequence; listeners only differ in how far they have read.
+
+For example, if a client receives sequence 10 and disconnects, it can reconnect to `/v1/transactions/stream?after=10` to receive 11 onward. This is a one-way stream, so clients keep a connection open rather than polling once per second.
+
 ## Data model
 
 The SQL types and constraints are in [`schema.sql`](schema.sql). IDs are UUIDs. Timestamps are UTC ISO 8601 in generated files and `TIMESTAMPTZ` in SQL. `amount_minor` is a positive integer in currency minor units; the first version uses USD only. The transaction status is `pending`, `approved`, `declined`, or `refunded`. A full refund changes the original transaction's status and leaves its original amount intact. Partial refunds are outside the first version.
@@ -69,8 +94,8 @@ Occasionally, a fictional persona uses three separate accounts with styled versi
 ## Roadmap
 
 1. Validate generated month-long patterns and the event contract.
-2. Add a continuously running producer and short replay window.
-3. Host a public HTTP stream and reference-table downloads.
+2. Validate the shared live service under longer runs and disconnections.
+3. Host the HTTP stream and reference snapshots publicly.
 4. Add a local Kafka adapter and optional database sink examples.
 
 No real financial data, personal data, payment credentials, or proprietary business rules belong in this repository.
