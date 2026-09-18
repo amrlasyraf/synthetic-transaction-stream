@@ -1,1 +1,76 @@
-# synthetic-transaction-stream
+# Synthetic Transaction Stream
+
+An open source producer of **entirely synthetic** retail transaction data. It creates four related tables and a chronological event file suitable for learning ingestion, joins, streaming, and anomaly detection. The scenarios, identities, merchants, and partners are fictional and were created for this project.
+
+The first release generates files locally. A hosted stream and Kafka adapter are planned after the data model and output are reviewed.
+
+## Generate data
+
+Requires Python 3.10 or newer. The generator has no runtime dependencies.
+
+```sh
+python -m pip install -e .
+synthetic-transactions --output output --start-date 2026-01-01 --days 30 --seed 42
+```
+
+Or without installing the package:
+
+```sh
+PYTHONPATH=src python -m synthetic_transaction_stream --output output
+```
+
+PowerShell equivalent for the second command:
+
+```powershell
+$env:PYTHONPATH = 'src'
+python -m synthetic_transaction_stream --output output
+```
+
+Use `--transactions-per-day`, `--users`, `--merchants`, and `--partners` to change the scale. `--no-anomalies` removes the scripted anomaly bursts. A fixed seed and settings reproduce the same files.
+
+Validate the files and print status, daily, and hourly counts:
+
+```sh
+python -m synthetic_transaction_stream.validate output
+```
+
+## Files
+
+| File | Contents |
+| --- | --- |
+| `users.csv` | Fictional user identifiers, pseudonyms, and home zones |
+| `partners.csv` | Fictional partner reference data |
+| `merchants.csv` | Merchants linked to partners, with category and zone |
+| `transactions.csv` | Final transaction state after all generated events |
+| `transaction_events.ndjson` | Chronological creation and status-change events |
+| `scenario_labels.csv` | Separate answer key for injected anomaly transactions |
+| `manifest.json` | Seed, time range, and row counts |
+
+`scenario_labels.csv` is intentionally separate from the event stream. Do not give it to a learner before an exercise if they should detect the scenarios themselves.
+
+## Data model
+
+The SQL types and constraints are in [`schema.sql`](schema.sql). IDs are UUIDs. Timestamps are UTC ISO 8601 in generated files and `TIMESTAMPTZ` in SQL. `amount_minor` is a positive integer in currency minor units; the first version uses USD only. The transaction status is `pending`, `approved`, `declined`, or `refunded`. A full refund changes the original transaction's status and leaves its original amount intact. Partial refunds are outside the first version.
+
+`transaction_events.ndjson` has one JSON object per line. Each event has a unique `event_id`, increasing `sequence_no`, `event_type`, `emitted_at`, and a full `transaction` snapshot. A transaction starts at `status_version: 1`; later status changes increase the version. Consumers can upsert by `transaction_id` and apply only newer versions.
+
+Example event:
+
+```json
+{"event_id":"...","event_type":"transaction.created","emitted_at":"2026-01-01T08:30:00Z","transaction":{"transaction_id":"...","user_id":"...","merchant_id":"...","amount_minor":1250,"currency":"USD","channel":"in_store","status":"pending","status_version":1,"created_at":"2026-01-01T08:30:00Z","status_updated_at":"2026-01-01T08:30:00Z"},"sequence_no":1}
+```
+
+## Behaviour
+
+Transactions follow weekday and weekend hourly profiles. Dining is more common around lunch and dinner, transit around commute times, and grocery purchases in the evening. Amount ranges vary by merchant category. A small share of transactions decline; a smaller share of approved transactions become fully refunded.
+
+Occasionally, a fictional persona uses three separate accounts with styled versions of one pseudonym and makes a rapid burst of unusually large transactions. The labels identify the scripted scenario for evaluation. Similar display names alone should not be treated as evidence of fraud.
+
+## Roadmap
+
+1. Validate generated month-long patterns and the event contract.
+2. Add a continuously running producer and short replay window.
+3. Host a public HTTP stream and reference-table downloads.
+4. Add a local Kafka adapter and optional database sink examples.
+
+No real financial data, personal data, payment credentials, or proprietary business rules belong in this repository.
