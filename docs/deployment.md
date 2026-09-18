@@ -2,6 +2,8 @@
 
 The local PowerShell command stops when the terminal closes. The container setup runs the same producer as a service and keeps its SQLite replay log in a Docker volume. It works on a single Linux VPS; a public hostname and DNS record are needed for the HTTPS proxy.
 
+For the proposed Tencent Lighthouse instance, pricing checks, firewall settings, validation steps, and backups, see [the Lighthouse plan](tencent-lighthouse.md).
+
 ## Local container check
 
 From the repository root on a machine with Docker Compose:

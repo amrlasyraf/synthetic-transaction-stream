@@ -4,7 +4,7 @@ An open source producer of **entirely synthetic** retail transaction data. It cr
 
 The generator creates reproducible local files. A separate live service now produces a shared stream locally; public hosting and a Kafka adapter remain planned.
 
-For an always-running container and VPS plan, see [`docs/deployment.md`](docs/deployment.md).
+For an always-running container and VPS plan, see [`docs/deployment.md`](docs/deployment.md). The proposed Tencent Lighthouse setup and pre-purchase checklist are in [`docs/tencent-lighthouse.md`](docs/tencent-lighthouse.md).
 
 ## Generate data
 
