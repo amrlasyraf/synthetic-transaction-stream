@@ -219,6 +219,79 @@ class StreamServer(ThreadingHTTPServer):
         super().__init__(address, StreamHandler)
 
 
+INDEX_HTML = """<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Synthetic transaction stream</title>
+  <style>
+    body { max-width: 860px; margin: 48px auto; padding: 0 20px; color: #202323;
+           background: #fafaf8; font: 16px/1.5 system-ui, sans-serif; }
+    h1 { font-size: 1.8rem; margin-bottom: 0.25rem; }
+    h2 { font-size: 1.15rem; margin-top: 2rem; }
+    p { color: #4d5554; }
+    a { color: #0a6157; }
+    code, pre { font-family: ui-monospace, Consolas, monospace; }
+    code { background: #efefeb; padding: 0.1em 0.3em; }
+    #connection { font-weight: 600; }
+    ul { padding-left: 1.2rem; }
+    #events { padding: 0; list-style: none; border-top: 1px solid #d8ddda; }
+    #events li { padding: 0.6rem 0; border-bottom: 1px solid #d8ddda;
+                 font-family: ui-monospace, Consolas, monospace; font-size: 0.9rem; }
+    .muted { color: #67716d; }
+  </style>
+</head>
+<body>
+  <h1>Synthetic transaction stream</h1>
+  <p>One shared stream of fictional retail transactions. This page listens for new events; the producer runs even when nobody is connected.</p>
+  <p id="connection">Connecting…</p>
+  <p id="range" class="muted">Checking the event log…</p>
+
+  <h2>Live events</h2>
+  <p class="muted">New events appear below. A transaction may first be pending and then change status.</p>
+  <ul id="events"></ul>
+
+  <h2>Explore the API</h2>
+  <ul>
+    <li><a href="/health">Health and replay range</a></li>
+    <li><a href="/v1/users">Users</a>, <a href="/v1/merchants">merchants</a>, <a href="/v1/partners">partners</a></li>
+    <li><a href="/v1/transactions/events">Retained events as JSON</a></li>
+    <li><a href="/v1/transactions/stream">Raw live stream</a></li>
+  </ul>
+  <p>To resume after a disconnect, pass your last sequence number as <code>?after=123</code>. The replay window is seven days.</p>
+  <script>
+    const connection = document.getElementById('connection');
+    const range = document.getElementById('range');
+    const list = document.getElementById('events');
+    fetch('/health').then(r => r.json()).then(info => {
+      range.textContent = `Stored sequences: ${info.oldest_sequence}–${info.latest_sequence} · retention: ${info.retention_days} days`;
+    }).catch(() => { range.textContent = 'Could not read the event log.'; });
+    const stream = new EventSource('/v1/transactions/stream');
+    stream.onopen = () => { connection.textContent = 'Connected · waiting for events'; };
+    stream.onerror = () => { connection.textContent = 'Reconnecting…'; };
+    stream.addEventListener('transaction', message => {
+      const event = JSON.parse(message.data);
+      const tx = event.transaction;
+      const row = document.createElement('li');
+      row.textContent = `#${event.sequence_no} · ${event.emitted_at} · ${tx.transaction_id.slice(0, 8)} · ${tx.status} · ${(tx.amount_minor / 100).toFixed(2)} ${tx.currency}`;
+      list.prepend(row);
+      while (list.children.length > 25) list.lastChild.remove();
+      connection.textContent = 'Connected · receiving events';
+      fetch('/health').then(r => r.json()).then(info => {
+        range.textContent = `Stored sequences: ${info.oldest_sequence}–${info.latest_sequence} · retention: ${info.retention_days} days`;
+      });
+    });
+    stream.addEventListener('gap', () => {
+      connection.textContent = 'Replay gap: refresh to start at the current event';
+      stream.close();
+    });
+  </script>
+</body>
+</html>
+"""
+
+
 class StreamHandler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
     server: StreamServer
@@ -229,6 +302,14 @@ class StreamHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(payload)))
         self.send_header("Access-Control-Allow-Origin", "*")
+        self.end_headers()
+        self.wfile.write(payload)
+
+    def _html(self, body: str) -> None:
+        payload = body.encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(payload)))
         self.end_headers()
         self.wfile.write(payload)
 
@@ -244,6 +325,14 @@ class StreamHandler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:
         url = urlsplit(self.path)
         query = parse_qs(url.query)
+        if url.path == "/":
+            self._html(INDEX_HTML)
+            return
+        if url.path == "/favicon.ico":
+            self.send_response(204)
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            return
         if url.path == "/health":
             oldest, latest = self.server.store.bounds()
             self._json(200, {"status": "ok", "oldest_sequence": oldest,

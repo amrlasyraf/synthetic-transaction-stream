@@ -34,6 +34,9 @@ class LiveTests(unittest.TestCase):
             thread.start()
             base = f"http://127.0.0.1:{server.server_port}"
             try:
+                with urlopen(base + "/", timeout=5) as home:
+                    self.assertEqual(home.status, 200)
+                    self.assertIn(b"Synthetic transaction stream", home.read())
                 with urlopen(base + "/v1/transactions/stream?after=0", timeout=5) as a, \
                      urlopen(base + "/v1/transactions/stream?after=0", timeout=5) as b:
                     store.publish(event())

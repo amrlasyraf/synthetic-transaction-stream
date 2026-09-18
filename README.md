@@ -56,7 +56,7 @@ Start one producer and HTTP server locally:
 python -m synthetic_transaction_stream.live --db data/events.sqlite --port 8080
 ```
 
-In another terminal, inspect the stream with `curl -N http://127.0.0.1:8080/v1/transactions/stream` (`curl.exe -N` in PowerShell). Check `http://127.0.0.1:8080/health` for the current sequence range. The stream begins at the current tip, so leave it open for new events or supply `?after=0` to read retained events from the start.
+Open `http://127.0.0.1:8080/` in a browser for a small live viewer and endpoint links. In another terminal, inspect the raw stream with `curl -N http://127.0.0.1:8080/v1/transactions/stream` (`curl.exe -N` in PowerShell). Check `http://127.0.0.1:8080/health` for the current sequence range. The stream begins at the current tip, so leave it open for new events or supply `?after=0` to read retained events from the start.
 
 The process produces transactions independently of listeners. It writes events to a SQLite log and keeps seven days of published events. Pending status changes also survive a restart. The rate varies by hour and weekday; `--transactions-per-day` sets the approximate weekday volume (default 6000). The live database stays in `data/`, which Git ignores.
 
